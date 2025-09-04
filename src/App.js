@@ -25,7 +25,7 @@ function App() {
 
   useEffect(() => {
     fetchCards(query);
-  }, []);
+  }, [query]);
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial" }}>

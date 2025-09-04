@@ -19,22 +19,39 @@ app.get("/api/search", async (req, res) => {
     });
 
     const page = await browser.newPage();
+
+    // User-agent real
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     );
 
-    // Cargar solo la página inicial
-    await page.goto(searchUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 60000,
+    // Bloquear recursos innecesarios
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (["image", "stylesheet", "font"].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
     });
-    await page.waitForSelector("li.itemList", { timeout: 15000 });
 
+    // Ir a la página y esperar a que termine el JS
+    await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 60000 });
+
+    // Esperar selector de lista de productos
+    try {
+      await page.waitForSelector("li.itemList", { timeout: 30000 });
+    } catch {
+      console.log(
+        "No se encontraron productos o el sitio bloqueó la solicitud"
+      );
+      return res.json([]);
+    }
+
+    // Extraer datos
     const results = await page.evaluate(() => {
       const items = [];
       const list = document.querySelectorAll("li.itemList");
-
-      // Limitar a las primeras 30 cartas
       for (let i = 0; i < Math.min(list.length, 30); i++) {
         const el = list[i];
         const title = el.querySelector(".itemName")?.innerText.trim();
@@ -47,16 +64,8 @@ app.get("/api/search", async (req, res) => {
           "https://www.hareruyamtg.com" +
           el.querySelector(".itemName")?.getAttribute("href");
 
-        // Datos adicionales
-        const set =
-          el.querySelector(".itemDetail__set")?.innerText.trim() || null;
-        const language =
-          el.querySelector(".itemDetail__language")?.innerText.trim() || null;
-        const foil =
-          el.querySelector(".itemDetail__foil")?.innerText.trim() || null;
-
         if (title && price) {
-          items.push({ title, price, stock, img, link, set, language, foil });
+          items.push({ title, price, stock, img, link });
         }
       }
       return items;
@@ -72,5 +81,5 @@ app.get("/api/search", async (req, res) => {
 });
 
 app.listen(4000, () => {
-  console.log("✅ Fast API running on http://localhost:4000");
+  console.log("✅ API running on http://localhost:4000");
 });
